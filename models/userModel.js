@@ -1,4 +1,5 @@
 import {Schema,model} from 'mongoose';
+import bcrypt from 'bcrypt';
 
 const userSchema = new Schema({
     username:{
@@ -14,5 +15,17 @@ const userSchema = new Schema({
         require:true
     }
 },{timestamps:true});
+
+userSchema.pre("save",async function(next){
+    const user = this;
+    const rounds = 10;
+    const salt = await bcrypt.genSalt(rounds);
+    const hashPass = await bcrypt.hash(user.password,salt);
+    user.password=hashPass;
+    next();
+});
+userSchema.methods.comparePass=async function(password){
+    
+}
 const User = model('user',userSchema);
 export default User;
