@@ -1,5 +1,6 @@
 import {Schema,model} from 'mongoose';
 import bcrypt from 'bcrypt';
+import { generateToken } from '../services/jsonWeb.js';
 
 const userSchema = new Schema({
     username:{
@@ -8,7 +9,8 @@ const userSchema = new Schema({
     },
     email:{
         type:String,
-        require:true
+        require:true,
+        unique:true
     },
     password:{
         type:String,
@@ -25,7 +27,10 @@ userSchema.pre("save",async function(next){
     next();
 });
 userSchema.methods.comparePass=async function(password){
-    
-}
+    const isMatched = await bcrypt.compare(password,this.password);
+    if(isMatched){
+        return await generateToken({_id:this._id,email:this.email,password:this.password});
+    };
+};
 const User = model('user',userSchema);
 export default User;
