@@ -3,9 +3,9 @@ import { validateToken } from "../services/jsonWeb.js";
 
 export const authenticate = async(req,res)=>{
     const token = req.headers['authorization']?.split(' ')[1];
-    const data = await validateToken(token);
-    if(!data)return res.status(404).json({message:"Token not verified"});
-    return res.status(200).json({message:"Token Verified"});
+    const payload = await validateToken(token);
+    if(!payload)return res.status(404).json({message:"Token not verified"});
+    return res.status(200).json({message:"Token Verified",user:payload});
 };
 export const LoginUser=async(req,res)=>{
     try {
