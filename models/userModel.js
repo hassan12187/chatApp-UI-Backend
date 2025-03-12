@@ -15,7 +15,13 @@ const userSchema = new Schema({
     password:{
         type:String,
         require:true
-    }
+    },
+    friends:[
+        {
+            type:Schema.Types.ObjectId,
+            ref:'User',
+        }
+    ]
 },{timestamps:true});
 
 userSchema.pre("save",async function(next){

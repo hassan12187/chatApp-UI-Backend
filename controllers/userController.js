@@ -14,7 +14,7 @@ export const LoginUser=async(req,res)=>{
         if(!user) return res.status(404).json({message:"User not Found."});
         const comparePassAndGenToken = await user.comparePass(password);
         if(!comparePassAndGenToken) {return res.status(400).json({message:"Wrong Credentials"})};
-        return res.status(200).cookie("token",comparePassAndGenToken).json({message:"User Logged in."});
+        return res.status(200).cookie("token",comparePassAndGenToken).json({message:"User Logged in.",token:comparePassAndGenToken});
     } catch (error) {
         console.log(`Error in User Controller ${error}`);
     }
