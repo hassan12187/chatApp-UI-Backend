@@ -16,10 +16,14 @@ const userSchema = new Schema({
         type:String,
         require:true
     },
+    profileImage:{
+        type:String,
+        default:'default_user.jpg'
+    },
     friends:[
         {
             type:Schema.Types.ObjectId,
-            ref:'User',
+            ref:'user',
         }
     ]
 },{timestamps:true});
@@ -35,7 +39,7 @@ userSchema.pre("save",async function(next){
 userSchema.methods.comparePass=async function(password){
     const isMatched = await bcrypt.compare(password,this.password);
     if(isMatched){
-        return await generateToken({_id:this._id,username:this.username,email:this.email,password:this.password});
+        return await generateToken({_id:this._id,username:this.username,email:this.email,password:this.password,image:this.profileImage});
     };
 };
 const User = model('user',userSchema);

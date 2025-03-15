@@ -15,6 +15,7 @@ app.use(cors({
     credentials:true,
 }));
 app.use(express.json());
+app.use('/images',express.static("images"));
 
 app.use('/user',userRouter);
 connectDB().then(()=>{
@@ -39,11 +40,11 @@ connectDB().then(()=>{
                 socket.username=user.username;
                 try {
                     socket.on('message',(text)=>{
-                        wss.clients.forEach(client=>{
-                            if(client !== socket && client.readyState===WebSocket.OPEN){
-                                client.send(JSON.stringify({senderName:user.username,message:text.toString()}));
-                            }
-                        })
+                        // wss.clients.forEach(client=>{
+                        //     if(client !== socket && client.readyState===WebSocket.OPEN){
+                        //         client.send(JSON.stringify({senderName:user.username,message:text.toString()}));
+                        //     }
+                        // })
                     });
                 } catch (error) {
                     console.log(`wrong message format ${error}`);
