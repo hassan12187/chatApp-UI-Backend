@@ -16,8 +16,8 @@ router.get('/api/protected',authenticate);
 router.get('/allUsers',getUsers);
 router.post('/login',LoginUser);
 router.post('/signup',upload.single('profileImage'),registerUser);
-router.get('/:id',getUserbyId);
-router.post('/addFriend/:id',addFriend);
+router.get('/:id',authenticate,getUserbyId);
+router.post('/addFriend/:id',authenticate,addFriend);
 router.get('/userFriends/:id',getFriendsofUser);
 
 export default router;

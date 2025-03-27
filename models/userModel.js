@@ -29,18 +29,22 @@ const userSchema = new Schema({
 },{timestamps:true});
 
 userSchema.pre("save",async function(next){
-    const user = this;
-    const rounds = 10;
-    const salt = await bcrypt.genSalt(rounds);
-    const hashPass = await bcrypt.hash(user.password,salt);
-    user.password=hashPass;
-    next();
+    if(!this.isModified("password")) return next();
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password=await bcrypt.hash(this.password,salt);;
+        next();
+    } catch (error) {
+        next(error);
+    }
+
 });
 userSchema.methods.comparePass=async function(password){
     const isMatched = await bcrypt.compare(password,this.password);
     if(isMatched){
-        return await generateToken({_id:this._id,username:this.username,email:this.email,password:this.password,image:this.profileImage});
+        return generateToken({_id:this._id,username:this.username,email:this.email,image:this.profileImage});
     };
+    return false;
 };
 const User = model('user',userSchema);
 export default User;
