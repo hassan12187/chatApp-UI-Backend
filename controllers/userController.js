@@ -1,3 +1,5 @@
+import mongoose, { mongo, MongooseError } from "mongoose";
+import messageModel from "../models/messageModel.js";
 import User from "../models/userModel.js";
 import { validateToken } from "../services/jsonWeb.js";
 
@@ -17,14 +19,12 @@ export const LoginUser=async(req,res)=>{
         const {email,password}=req.body;
         const user = await User.findOne({email});
         if(!user) return res.status(404).json({message:"User not Found."});
-        console.log(`hashed password ${user.password}`);
-        console.log(`input password ${password}`);
         const comparePassAndGenToken = await user.comparePass(password);
         if(!comparePassAndGenToken){
             console.log('password not matched');
         return res.status(400).json({message:"Wrong Credentials"});
         }
-            return res.status(200).cookie("token",comparePassAndGenToken).json({message:"User Logged in.",token:comparePassAndGenToken});
+            return res.status(200).json({message:"User Logged in.",token:comparePassAndGenToken});
     } catch (error) {
         return res.status(401).json({message:`Error Logging in user ${error}`});
     }
@@ -92,9 +92,40 @@ export const addFriend=async(req,res)=>{
 }
 export const getFriendsofUser=async(req,res)=>{
     try{
-        const id = req.params.id;
-        const user = await User.findById({_id:id}).populate('friends');
-        return res.status(200).json({data:user.friends});
+        const id = new mongoose.Types.ObjectId(req.params.id);
+        const user = await User.findById(id).populate('friends').lean();
+        const message = await messageModel.aggregate([{$match:{receiverId:id,isRead:false}},{$lookup:{
+            from:"users",
+            foreignField:"_id",
+            localField:"senderId",
+            as:"senderDetails"
+        }},
+        {
+            $unwind:"$senderDetails"
+        },
+        {
+         $group:{
+            _id:null,
+            unreadCount:{$sum:1},
+            messages:{$push:"$$ROOT"}
+         }   
+        }
+    ]);
+    if (message.length === 0) {
+        return res.status(200).json(user);
+    }
+   const unreadMap = new Map();
+   message.forEach((msg)=>{
+    if(msg.messages.length){
+        unreadMap.set(msg.messages[0].senderDetails._id.toString(),msg.unreadCount);
+    }
+   });
+   user.friends.map((friend)=>{
+    if(unreadMap.has(friend._id.toString())){
+        friend.unreadCount=unreadMap.get(friend._id.toString());
+    }
+   });
+    return res.status(200).json(user.friends);
     }catch(err){
         return res.status(401).json({message:`Error getting friends of user ${err}`});
     }

@@ -50,13 +50,12 @@
     sub.subscribe('chat');
     sub.on('message',async(channel,message)=>{
         const {senderId,receiverId,txt} = JSON.parse(message);
-        const model = new messageModel({senderId,receiverId,message:txt});
-        await model.save();
+        const model = new messageModel({senderId,receiverId,message:txt,isRead:false});
         const receiverSocketId = onlineUsers.get(receiverId);
         if(receiverSocketId){
             io.to(receiverSocketId).emit('messageSender',{senderId,message:txt,date:new Date()});
         }
-        
+        await model.save();
     });
     io.on('connection',(socket)=>{
         socket.on('register',async(userId,recId)=>{
@@ -65,8 +64,9 @@
                 $or:[
                     {senderId:userId,receiverId:recId},
                     {senderId:recId,receiverId:userId},
-                ],
-            }).sort({timestamp:1});
+                ]
+            }); 
+            console.log(messages);
             socket.emit("previousMessages",messages);
         });
         socket.on('message',(message)=>{
