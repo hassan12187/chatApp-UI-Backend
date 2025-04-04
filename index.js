@@ -66,7 +66,6 @@
                     {senderId:recId,receiverId:userId},
                 ]
             }); 
-            console.log(messages);
             socket.emit("previousMessages",messages);
         });
         socket.on('message',(message)=>{

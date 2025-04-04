@@ -125,8 +125,16 @@ export const getFriendsofUser=async(req,res)=>{
         friend.unreadCount=unreadMap.get(friend._id.toString());
     }
    });
+   console.log(user);
     return res.status(200).json(user.friends);
     }catch(err){
         return res.status(401).json({message:`Error getting friends of user ${err}`});
     }
+}
+export const readUserMessages=async(req,res)=>{
+    try{
+        const {receiverId,userId} = req.body;
+        const result = await messageModel.updateMany({senderId:receiverId,receiverId:userId},{$set:{isRead:true}});
+        return res.status(200).json(result);
+    }catch(err){}
 }
