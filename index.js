@@ -11,6 +11,7 @@
     import messageModel from './models/messageModel.js';
     import cluster from 'cluster';
     import os from 'os';
+
     dotenv.config();
         const app = express();
     app.use(cors({
@@ -39,7 +40,9 @@
         connectDB();
         const io = new Server(server,{
         cors:{
-            origin:"http://localhost:5173"        
+            origin:"http://localhost:5173",
+            methods:['GET','POST'],
+            credentials:true,
         },
     });
     const pub = new Redis();
@@ -59,12 +62,13 @@
     io.on('connection',(socket)=>{
         socket.on('register',async(userId,recId)=>{
             onlineUsers.set(userId,socket.id);
-            const messages = await messageModel.find({
-                $or:[
-                    {senderId:userId,receiverId:recId},
-                    {senderId:recId,receiverId:userId},
-                ]
-            }); 
+                const messages = await messageModel.find({
+                    $or:[
+                        {senderId:userId,receiverId:recId},
+                        {senderId:recId,receiverId:userId},
+                    ]
+                }); 
+           
             socket.emit("previousMessages",messages);
         });
         socket.on('message',(message)=>{
