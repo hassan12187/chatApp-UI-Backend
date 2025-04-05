@@ -39,8 +39,7 @@
         connectDB();
         const io = new Server(server,{
         cors:{
-            origin:"http://localhost:5173",
-            methods:["GET","POST"],
+            origin:"http://localhost:5173"        
         },
     });
     const pub = new Redis();
