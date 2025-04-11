@@ -2,6 +2,7 @@ import mongoose, { mongo, MongooseError } from "mongoose";
 import messageModel from "../models/messageModel.js";
 import User from "../models/userModel.js";
 import { validateToken } from "../services/jsonWeb.js";
+import {hash,genSalt} from 'bcrypt';
 
 export const authenticate = async(req,res,next)=>{
     try{
@@ -112,7 +113,7 @@ export const getFriendsofUser=async(req,res)=>{
         }
     ]);
     if (message.length === 0) {
-        return res.status(200).json(user);
+        return res.status(200).json(user.friends);
     }
    const unreadMap = new Map();
    message.forEach((msg)=>{
@@ -125,7 +126,6 @@ export const getFriendsofUser=async(req,res)=>{
         friend.unreadCount=unreadMap.get(friend._id.toString());
     }
    });
-   console.log(user);
     return res.status(200).json(user.friends);
     }catch(err){
         return res.status(401).json({message:`Error getting friends of user ${err}`});
@@ -137,4 +137,15 @@ export const readUserMessages=async(req,res)=>{
         const result = await messageModel.updateMany({senderId:receiverId,receiverId:userId},{$set:{isRead:true}});
         return res.status(200).json(result);
     }catch(err){}
+}
+export const updatePassword=async(req,res)=>{
+    try {
+        const {id,data}=req.body;
+        const salt = await genSalt(10);
+        const hashPassword=await hash(data,salt);
+        const result = await User.findOneAndUpdate({_id:id},{$set:{password:hashPassword}});
+        return res.status(200).json(result);
+    } catch (error) {
+        console.log('error updating password',error);
+    }
 }

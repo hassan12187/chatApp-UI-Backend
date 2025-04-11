@@ -11,6 +11,7 @@
     import messageModel from './models/messageModel.js';
     import cluster from 'cluster';
     import os from 'os';
+    import emailRoute from './router/emailRouter.js';
 
     dotenv.config();
         const app = express();
@@ -22,6 +23,7 @@
 
     app.use('/images',express.static("images"));
     app.use('/user',userRouter);
+    app.use('/email',emailRoute);
     app.get('/validate',(req,res)=>{
         const token = req.headers['authorization']?.split(' ')[1];
         const payload = validateToken(token);
