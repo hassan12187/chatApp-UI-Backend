@@ -12,9 +12,9 @@ export const verifyPassAndSendEmail=async(req,res)=>{
         const comparison = await compare(currentPass,user.password);
         if(!comparison){return res.status(400).json({message:"current password is wrong."})};
         const salt = await genSalt(10);
-        const hs = await hash("superman@121",salt);
-        const link = `http://localhost:5173/email/verifyEmail?id=${id}&data=${newPass}&url=/user/updatePassword&${hs}`;
-        await sendEmail(email,"Password change Request",link);
+        const hashedValue = await hash("superman@121",salt);
+        const link = `http://localhost:5173/email/verifyEmail?id=${id}&data=${newPass}&url=/user/updatePassword&${hashedValue}`;
+        sendEmail(email,"Password change Request",link);
         return res.status(200).json({message:"Verification Link has been sent to your email."});
     } catch (error) {
         console.log(`Error verifying pass and sending email. ${error}`);
@@ -23,14 +23,14 @@ export const verifyPassAndSendEmail=async(req,res)=>{
 };
 export const verifyEmailAndRegister=async(req,res)=>{
     try {
-        const {email}=req.body;
-        const salt = await genSalt(10);
-        const hash = await hash("superman@121",salt);
-        const link = `http://localhost:5173/email/verifyEmail?data=${req.body}&url=/user/signup&${hash}`;
-        await sendEmail(email,"Verify Email",link);
-        return res.end();
+        const email = req.headers.email;
+        const salt = await genSalt(10); 
+        const hashedValue = await hash("superman@121",salt);
+        const link = `http://localhost:5173/email/verifyEmail?data=${JSON.stringify(req.body)}&url=/user/signup&${hashedValue}`;
+        sendEmail(email,"Verify Email",link);
+        return res.status(200).json({message:"Verification link has been send to your email."});
     } catch (error) {
-        console.log('error verifying email and registring.');
-        return res.status(401).json({error});
+        console.log('Error sending email.',error);
+        return res.status(400).json({message:"Error Sending Email"});
     }
 }

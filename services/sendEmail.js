@@ -20,9 +20,10 @@ const sendEmail=(to,subject,text)=>{
                 return res.status(401).json({message:"Error sending email verification."});
             }else{
                 console.log(info);
-                return res.status(250).json({message:"Verification Link has been sent to your email."});
+                return res.status(200).json({message:"Verification Link has been sent to your email."});
             }
         });
+        return transporter;
     } catch (error) {
         console.log('Error sending Email',error);
     }

@@ -1,8 +1,8 @@
-import mongoose, { mongo, MongooseError } from "mongoose";
 import messageModel from "../models/messageModel.js";
 import User from "../models/userModel.js";
 import { validateToken } from "../services/jsonWeb.js";
 import {hash,genSalt} from 'bcrypt';
+import friendRequestModel from "../models/friendRequestModel.js";
 
 export const authenticate = async(req,res,next)=>{
     try{
@@ -19,7 +19,7 @@ export const LoginUser=async(req,res)=>{
     try {
         const {email,password}=req.body;
         const user = await User.findOne({email});
-        if(!user) return res.status(404).json({message:"User not Found."});
+        if(!user) {return res.status(400).json({message:"User not Found."})};
         const comparePassAndGenToken = await user.comparePass(password);
         if(!comparePassAndGenToken){
             console.log('password not matched');
@@ -32,7 +32,7 @@ export const LoginUser=async(req,res)=>{
 }
 export const registerUser=async(req,res)=>{
     try {
-        const {username,email,password}=req.body;
+        const {username,email,password}=JSON.parse(req.body.data);
         let result;
         if(req.file){
             result=await User.create({username,email,password,profileImage:req.file.filename});    
@@ -42,7 +42,7 @@ export const registerUser=async(req,res)=>{
         if(!result) return res.status(401).json({message:"Error in Registration."});
         return res.status(200).json({message:"User Registered"});
     } catch (error) {
-        return res.status(401).json({message:`Error Getting all users ${error}`});
+        return res.status(401).json({message:`Error registring user ${error}`});
 
     }
 }
@@ -50,25 +50,32 @@ export const getUsers=async(req,res)=>{
     try {
         const val = req.query.q;
         let users;
-        if(val===""){
+        if(val.length<=0){
             users = await User.findOne({_id:req.user._id});
-            users=users.friends;
+            // users=users.friends;
         }else{
             users = await User.find({username:{$regex:val,$options:"i"}});
         }
-        return res.send(users);
+        return res.status(200).send(users);
     } catch (error) {
         return res.status(401).json({message:`Error Getting all users ${error}`});
         }
 }
 export const getUserbyId=async(req,res)=>{
     try {
+        const myid = req.user._id;
         const id = req.params.id;
         const user = await User.findOne({_id:id});
+        const friendRequest = await friendRequestModel.findOne({senderId:myid,receiverId:id});
+        if(!friendRequest){
+            return res.status(200).send({friends:false,user});
+        }
+        if(friendRequest.status===false){
+            return res.status(200).send({friends:"pending",user});
+        }
         if(user.friends.includes(req.user._id)){
             return res.status(200).send({friends:true,user});
         }
-        return res.status(200).send({friends:false,user});
     } catch (error) {
         return res.status(401).json({message:`Error Getting User by ID ${error}`});
     }
@@ -93,7 +100,8 @@ export const addFriend=async(req,res)=>{
 }
 export const getFriendsofUser=async(req,res)=>{
     try{
-        const id = new mongoose.Types.ObjectId(req.params.id);
+        console.log("here")
+        const id = req.user._id;
         const user = await User.findById(id).populate('friends').lean();
         const message = await messageModel.aggregate([{$match:{receiverId:id,isRead:false}},{$lookup:{
             from:"users",
@@ -128,6 +136,7 @@ export const getFriendsofUser=async(req,res)=>{
    });
     return res.status(200).json(user.friends);
     }catch(err){
+        console.log("error")
         return res.status(401).json({message:`Error getting friends of user ${err}`});
     }
 }
@@ -147,5 +156,16 @@ export const updatePassword=async(req,res)=>{
         return res.status(200).json(result);
     } catch (error) {
         console.log('error updating password',error);
+    }
+}
+export const getFriendRequests=async(req,res)=>{
+    try {
+        const id = req.user._id;
+        const result = await friendRequestModel.find({receiverId:id}).populate('senderId');
+        console.log(result);
+        return res.status(200).send(result);
+    } catch (error) {
+        console.log("Error getting friend requests.");
+        return res.status(401).json({message:error});
     }
 }
