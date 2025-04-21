@@ -161,11 +161,17 @@ export const updatePassword=async(req,res)=>{
 export const getFriendRequests=async(req,res)=>{
     try {
         const id = req.user._id;
-        const result = await friendRequestModel.find({receiverId:id}).populate('senderId');
-        console.log(result);
+        const result = await friendRequestModel.find({receiverId:id,status:false}).populate('senderId');
         return res.status(200).send(result);
     } catch (error) {
         console.log("Error getting friend requests.");
         return res.status(401).json({message:error});
     }
 }
+// export const confirmRequest = async(req,res)=>{
+//     try {
+//         req.params.id;
+//     } catch (error) {
+//         return res.status(401).json({message:error});
+//     }
+// }

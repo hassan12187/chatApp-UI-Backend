@@ -1,66 +1,29 @@
-import express from 'express';
 import dotenv from 'dotenv';
-import userRouter from './router/userRouter.js';
 import connectDB from './connection.js';
-import cors from 'cors';
-import http from 'http';
-import {Server} from 'socket.io';
-import Redis from 'ioredis';
-import {createAdapter} from '@socket.io/redis-adapter';
 import { validateToken } from './services/jsonWeb.js';
 import messageModel from './models/messageModel.js';
 import cluster from 'cluster';
 import os from 'os';
-import emailRoute from './router/emailRouter.js';
 import friendRequestModel from './models/friendRequestModel.js';
+import User from './models/userModel.js';
+import { messageQueue } from './queue/messageQueue.js';
+import { setupMessageWorker } from './queue/messageWorker.js';
+import {io,server} from './Server.js'
+import {connectRedis,redisClient} from './redisClient.js';
 
-    dotenv.config();
-        const app = express();
-    app.use(cors({
-        origin:"http://localhost:5173",
-        credentials:true,
-    }));
-    app.use(express.json());
-    app.use('/images',express.static("images"));
-    app.use('/email',emailRoute);
-    app.use('/user',userRouter);
-    app.get('/validate',(req,res)=>{
-        const token = req.headers['authorization']?.split(' ')[1];
-        const payload = validateToken(token);
-        if(!payload)return res.status(404).json({message:"Token not verified"});
-        req.user=payload;
-        return res.status(201).json(payload);
-    });
+dotenv.config();
+
 
     if(cluster.isPrimary){
         connectDB();
+        connectRedis();
         for(let i = 0 ;i<os.cpus().length;i++){
             cluster.fork()
         }
+        setupMessageWorker(io);
     }else{
-        const server = http.createServer(app);
         connectDB();
-        const io = new Server(server,{
-        cors:{
-            origin:"http://localhost:5173",
-            methods:['GET','POST'],
-            credentials:true,
-        },
-    });
-    const pub = new Redis();
-    const sub = new Redis();
-    io.adapter(createAdapter(pub,sub));
-    const onlineUsers = new Map();
-    sub.subscribe('chat');
-    sub.on('message',async(channel,message)=>{
-        const {senderId,receiverId,txt} = JSON.parse(message);
-        const model = new messageModel({senderId,receiverId,message:txt,isRead:false});
-        const receiverSocketId = onlineUsers.get(receiverId);
-        if(receiverSocketId){
-            io.to(receiverSocketId).emit('messageSender',{senderId,message:txt,date:new Date()});
-        }
-        await model.save();
-    });
+        connectRedis();
     io.use((socket,next)=>{
         const token = socket.handshake.auth.token;
         if(!token)return next(new Error("Authentication Error."));
@@ -72,21 +35,52 @@ import friendRequestModel from './models/friendRequestModel.js';
             next(new Error("Invalid Token."));
         }
     })
-    io.on('connection',(socket)=>{
-        onlineUsers.set(socket.user._id,socket.id)
-        socket.on('getPreviousMessages',async(userId,recId)=>{
+    io.on('connection',async(socket)=>{
+        // socket.on("connect",)
+        const userId=socket.user._id;
+        await redisClient.sAdd("onlineUsers",userId);
+        await redisClient.hSet('userSocketMap',userId,socket.id);
+
+        let friendsIds=await redisClient.sMembers(`friends:${userId}`);
+        
+        if(!friendsIds || friendsIds.length ===0){
+            const user = await User.findById(userId).select('friends');
+            friendsIds = user.friends.map(id=>id.toString());
+            if(friendsIds.length > 0){
+                await redisClient.sAdd(`friends:${userId}`,friendsIds);
+                await redisClient.expire(`friends:${userId}`,3600);
+            }
+        }
+        const pipeline = redisClient.multi();
+        friendsIds.forEach(friendId => {
+            pipeline.sIsMember('onlineUsers',friendId)});
+        const isOnlineArray = await pipeline.exec();
+
+        const onlineFriendIds = friendsIds.filter((_,i)=> isOnlineArray[i]===true );
+
+        socket.emit('onlineFriends',onlineFriendIds);
+        const friendSocketMap = await redisClient.hGetAll('userSocketMap');
+        const userDetail = await User.findById(userId);
+        onlineFriendIds.forEach((id,ind)=>{
+                const friendSocketId = friendSocketMap[id];
+                if(friendSocketId){
+                        io.to(friendSocketId).emit('friendOnline',userDetail);
+                    }
+                })
+                
+        socket.on('getPreviousMessages',async(recId)=>{
+            const userId=socket.user._id;
                 const messages = await messageModel.find({
                     $or:[
                         {senderId:userId,receiverId:recId},
                         {senderId:recId,receiverId:userId},
                     ]
                 }); 
-           
             socket.emit("previousMessages",messages);
         });
-        socket.on('message',(message)=>{
-            const data = JSON.parse(message)
-            pub.publish('chat',JSON.stringify(data));
+        socket.on('message',async(message)=>{
+            console.log("socket message");
+            await messageQueue.add('newMessage',JSON.parse(message))
         });
         socket.on('add-friend',async({requestSender,requestReceiver})=>{
             const result = await friendRequestModel.findOne({senderId:requestSender?._id,receiverId:requestReceiver});
@@ -100,12 +94,44 @@ import friendRequestModel from './models/friendRequestModel.js';
             await friendRequestModel.create({senderId:requestSender?._id,receiverId:requestReceiver})  
             console.log(`request sender ${requestSender} request receiver ${requestReceiver}`)
         });
-        socket.on('disconnect',()=>{
-            onlineUsers.forEach((id,userId)=>{
-                if(id===socket.id){
-                    onlineUsers.delete(userId);
-                }
-            })
+        socket.on("confirm_request",async({requestId,senderId,receiverId})=>{
+            try {
+
+                await friendRequestModel.findByIdAndUpdate(requestId,{$set:{status:true}});
+                const result = await User.bulkWrite([
+                    {
+                        updateOne:{
+                            filter:{_id:senderId},
+                            update:{$addToSet:{friends:receiverId}}
+                        }
+                    },{
+                        updateOne:{
+                            filter:{_id:receiverId},
+                            update:{$addToSet:{friends:senderId}}
+                        }
+                    }
+                ]);
+                console.log(result);
+                // const socketId = onlineUsers.get(senderId);
+                // const user = User.findOne({_id:receiverId});
+                // user.then((res)=>{
+                //     io.to(socketId).emit("request_accepted",res);
+                // })         
+            } catch (error) {
+                
+            }
+
+       
+        })
+        socket.on('disconnect',async()=>{
+          await redisClient.hDel('userSocketMap',userId);
+          await redisClient.sRem('onlineUsers',userId);
+          onlineFriendIds.forEach((id,ind)=>{
+            const friendSocketiD = friendSocketMap[id]
+            if(friendSocketiD){
+                io.to(friendSocketiD).emit("friendOffline",userId)
+            }
+          });
         })
     });
         server.listen(process.env.PORT || 8000,()=>console.log('server is listening on port 8000'))

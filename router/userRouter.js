@@ -22,5 +22,6 @@ router.post('/updatePassword',authenticate,updatePassword);
 router.get('/friendRequests',authenticate,getFriendRequests)
 router.post('/addFriend/:id',authenticate,addFriend);
 router.get('/:id',authenticate,getUserbyId);
+// router.patch('/user/confirmFriendRequest/:id',authenticate,confirmRequest)
 
 export default router;
