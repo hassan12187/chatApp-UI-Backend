@@ -32,7 +32,7 @@ export const LoginUser=async(req,res)=>{
 }
 export const registerUser=async(req,res)=>{
     try {
-        const {username,email,password}=JSON.parse(req.body.data);
+        const {username,email,password}=req.body;
         let result;
         if(req.file){
             result=await User.create({username,email,password,profileImage:req.file.filename});    

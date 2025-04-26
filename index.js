@@ -10,27 +10,31 @@ import { messageQueue } from './queue/messageQueue.js';
 import { setupMessageWorker } from './queue/messageWorker.js';
 import {io,server} from './Server.js'
 import {connectRedis, redisClient} from './redisClient.js';
+import { createClient } from 'redis';
+import { createAdapter } from '@socket.io/redis-adapter';
 
 dotenv.config();
 
-
-    // if(cluster.isPrimary){
-        //     for(let i = 0 ;i<os.cpus().length;i++){
-            //         cluster.fork()
-            //     }
-            // }else{
-                // const pubClient = createClient({url:'redis://localhost:6379'});
-                // const subClient = pubClient.duplicate();
-        // pubClient.connect().then(()=>{
-        //     console.log('publicne')
+    if(cluster.isPrimary){
+            for(let i = 0 ;i<os.cpus().length;i++){
+                    cluster.fork()
+                }
+                connectDB();
+                connectRedis();
+            }else{
+                connectDB();
+                connectRedis();
+                const pubClient = createClient({url:'redis://localhost:6379'});
+                const subClient = pubClient.duplicate();
+        pubClient.connect().then(()=>{
+            console.log('publicne')
         
-        // });
-        // subClient.connect().then(()=>{
-            //     console.log("subclient connected")
-            // });
-            // io.adapter(createAdapter(pubClient,subClient));
-            connectDB();
-        connectRedis();
+        });
+        subClient.connect().then(()=>{
+                console.log("subclient connected")
+            });
+            io.adapter(createAdapter(pubClient,subClient));
+          
             setupMessageWorker(io);
         io.use((socket,next)=>{
             const token = socket.handshake.auth.token;
@@ -102,11 +106,13 @@ dotenv.config();
             await messageQueue.add('newMessage',JSON.parse(message))
         });
         socket.on('add-friend',async({requestSender,requestReceiver})=>{
+            console.log("add-friend before cond")
             const result = await friendRequestModel.findOne({senderId:requestSender?._id,receiverId:requestReceiver});
             if(result){
+                console.log("add-friend in cond")
                 return;
             }
-            const friendSocketId = await redisClient.getSet('onlineUsers',requestReceiver);
+            const friendSocketId = await redisClient.hGet('userSocketMap',requestReceiver);
             console.log(friendSocketId)
             if(friendSocketId){
                 io.to(friendSocketId).emit("new_friend_request",requestSender)
@@ -156,4 +162,4 @@ dotenv.config();
         })
     });
         server.listen(process.env.PORT || 8000,()=>console.log('server is listening on port 8000'))
-    // }
+    }
