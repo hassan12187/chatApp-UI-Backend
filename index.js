@@ -9,34 +9,41 @@ import User from './models/userModel.js';
 import { messageQueue } from './queue/messageQueue.js';
 import { setupMessageWorker } from './queue/messageWorker.js';
 import {io,server} from './Server.js'
-import {connectRedis,redisClient} from './redisClient.js';
+import {connectRedis, redisClient} from './redisClient.js';
 
 dotenv.config();
 
 
-    if(cluster.isPrimary){
-        connectDB();
+    // if(cluster.isPrimary){
+        //     for(let i = 0 ;i<os.cpus().length;i++){
+            //         cluster.fork()
+            //     }
+            // }else{
+                // const pubClient = createClient({url:'redis://localhost:6379'});
+                // const subClient = pubClient.duplicate();
+        // pubClient.connect().then(()=>{
+        //     console.log('publicne')
+        
+        // });
+        // subClient.connect().then(()=>{
+            //     console.log("subclient connected")
+            // });
+            // io.adapter(createAdapter(pubClient,subClient));
+            connectDB();
         connectRedis();
-        for(let i = 0 ;i<os.cpus().length;i++){
-            cluster.fork()
-        }
-        setupMessageWorker(io);
-    }else{
-        connectDB();
-        connectRedis();
-    io.use((socket,next)=>{
-        const token = socket.handshake.auth.token;
-        if(!token)return next(new Error("Authentication Error."));
-        try {
-            const payload = validateToken(token);
-            socket.user = payload;
-            next();
-        } catch (error) {
-            next(new Error("Invalid Token."));
-        }
-    })
-    io.on('connection',async(socket)=>{
-        // socket.on("connect",)
+            setupMessageWorker(io);
+        io.use((socket,next)=>{
+            const token = socket.handshake.auth.token;
+            if(!token)return next(new Error("Authentication Error."));
+            try {
+                const payload = validateToken(token);
+                socket.user = payload;
+                next();
+            } catch (error) {
+                next(new Error("Invalid Token."));
+            }
+        })
+        io.on('connect',async(socket)=>{
         const userId=socket.user._id;
         await redisClient.sAdd("onlineUsers",userId);
         await redisClient.hSet('userSocketMap',userId,socket.id);
@@ -51,7 +58,7 @@ dotenv.config();
                 await redisClient.expire(`friends:${userId}`,3600);
             }
         }
-        const pipeline = redisClient.multi();
+        const pipeline = redisClient.multi(); 
         friendsIds.forEach(friendId => {
             pipeline.sIsMember('onlineUsers',friendId)});
         const isOnlineArray = await pipeline.exec();
@@ -59,15 +66,27 @@ dotenv.config();
         const onlineFriendIds = friendsIds.filter((_,i)=> isOnlineArray[i]===true );
 
         socket.emit('onlineFriends',onlineFriendIds);
+        console.log("onlineFriends event")
         const friendSocketMap = await redisClient.hGetAll('userSocketMap');
-        const userDetail = await User.findById(userId);
         onlineFriendIds.forEach((id,ind)=>{
                 const friendSocketId = friendSocketMap[id];
                 if(friendSocketId){
-                        io.to(friendSocketId).emit('friendOnline',userDetail);
+                        io.to(friendSocketId).emit('friendOnline',userId);
+                        console.log("success friendOnline")
                     }
                 })
-                
+        socket.on('typing',async(receiverid,val)=>{
+           redisClient.hGet('userSocketMap',receiverid).then((socketId)=>{
+                   console.log("typing friend socket id",socketId);
+                   socket.to(socketId).emit('friend-typing',true);
+            });
+        })
+        socket.on('not-typing',(receiverid)=>{
+            redisClient.hGet('userSocketMap',receiverid).then((socketId)=>{
+                console.log('friend not typing ');
+                socket.to(socketId).emit('friend-not-typing',false);
+            })
+        })
         socket.on('getPreviousMessages',async(recId)=>{
             const userId=socket.user._id;
                 const messages = await messageModel.find({
@@ -87,8 +106,9 @@ dotenv.config();
             if(result){
                 return;
             }
-            if(onlineUsers.has(requestReceiver)){
-                const friendSocketId = onlineUsers.get(requestReceiver);
+            const friendSocketId = await redisClient.getSet('onlineUsers',requestReceiver);
+            console.log(friendSocketId)
+            if(friendSocketId){
                 io.to(friendSocketId).emit("new_friend_request",requestSender)
             };
             await friendRequestModel.create({senderId:requestSender?._id,receiverId:requestReceiver})  
@@ -112,11 +132,11 @@ dotenv.config();
                     }
                 ]);
                 console.log(result);
-                // const socketId = onlineUsers.get(senderId);
-                // const user = User.findOne({_id:receiverId});
-                // user.then((res)=>{
-                //     io.to(socketId).emit("request_accepted",res);
-                // })         
+                const socketId = await redisClient.hGet('userSocketMap',senderId)
+                const user = User.findOne({_id:receiverId});
+                user.then((res)=>{
+                    io.to(socketId).emit("request_accepted",res);
+                })         
             } catch (error) {
                 
             }
@@ -130,9 +150,10 @@ dotenv.config();
             const friendSocketiD = friendSocketMap[id]
             if(friendSocketiD){
                 io.to(friendSocketiD).emit("friendOffline",userId)
+                console.log("friend offline")
             }
           });
         })
     });
         server.listen(process.env.PORT || 8000,()=>console.log('server is listening on port 8000'))
-    }
+    // }
