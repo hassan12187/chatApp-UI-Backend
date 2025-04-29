@@ -1,6 +1,6 @@
 import { createTransport } from "nodemailer";
 
-const sendEmail=(to,subject,text)=>{
+const sendEmail=(to,subject,link)=>{
     try {
         const transporter = createTransport({
             service:'gmail',
@@ -13,7 +13,7 @@ const sendEmail=(to,subject,text)=>{
             from:"no-reply@gmail.com",
             to:to,
             subject:subject,
-            text:text
+            html:link
         },(error,info)=>{
             if(error){
                 console.log('error',error);

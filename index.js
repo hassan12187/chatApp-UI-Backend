@@ -15,13 +15,13 @@ import { createAdapter } from '@socket.io/redis-adapter';
 
 dotenv.config();
 
-    if(cluster.isPrimary){
-            for(let i = 0 ;i<os.cpus().length;i++){
-                    cluster.fork()
-                }
-                connectDB();
-                connectRedis();
-            }else{
+    // if(cluster.isPrimary){
+    //         for(let i = 0 ;i<os.cpus().length;i++){
+    //                 cluster.fork()
+    //             }
+    //             connectDB();
+    //             connectRedis();
+    //         }else{
                 connectDB();
                 connectRedis();
                 const pubClient = createClient({url:'redis://localhost:6379'});
@@ -82,13 +82,13 @@ dotenv.config();
         socket.on('typing',async(receiverid,val)=>{
            redisClient.hGet('userSocketMap',receiverid).then((socketId)=>{
                    console.log("typing friend socket id",socketId);
-                   socket.to(socketId).emit('friend-typing',true);
+                   socket.to(socketId).emit('friend-typing');
             });
         })
         socket.on('not-typing',(receiverid)=>{
             redisClient.hGet('userSocketMap',receiverid).then((socketId)=>{
                 console.log('friend not typing ');
-                socket.to(socketId).emit('friend-not-typing',false);
+                socket.to(socketId).emit('friend-not-typing');
             })
         })
         socket.on('getPreviousMessages',async(recId)=>{
@@ -106,7 +106,6 @@ dotenv.config();
             await messageQueue.add('newMessage',JSON.parse(message))
         });
         socket.on('add-friend',async({requestSender,requestReceiver})=>{
-            console.log("add-friend before cond")
             const result = await friendRequestModel.findOne({senderId:requestSender?._id,receiverId:requestReceiver});
             if(result){
                 console.log("add-friend in cond")
@@ -122,31 +121,14 @@ dotenv.config();
         });
         socket.on("confirm_request",async({requestId,senderId,receiverId})=>{
             try {
-
-                await friendRequestModel.findByIdAndUpdate(requestId,{$set:{status:true}});
-                const result = await User.bulkWrite([
-                    {
-                        updateOne:{
-                            filter:{_id:senderId},
-                            update:{$addToSet:{friends:receiverId}}
-                        }
-                    },{
-                        updateOne:{
-                            filter:{_id:receiverId},
-                            update:{$addToSet:{friends:senderId}}
-                        }
-                    }
-                ]);
-                console.log(result);
                 const socketId = await redisClient.hGet('userSocketMap',senderId)
-                const user = User.findOne({_id:receiverId});
-                user.then((res)=>{
-                    io.to(socketId).emit("request_accepted",res);
-                })         
+                if(socketId){
+                    io.to(socketId).emit("request_accepted",receiverId);
+                }
             } catch (error) {
-                
+                error;
+                console.log("errro in comfirn request");
             }
-
        
         })
         socket.on('disconnect',async()=>{
@@ -162,4 +144,4 @@ dotenv.config();
         })
     });
         server.listen(process.env.PORT || 8000,()=>console.log('server is listening on port 8000'))
-    }
+    // }

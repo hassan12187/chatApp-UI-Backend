@@ -3,6 +3,7 @@ import User from "../models/userModel.js";
 import { validateToken } from "../services/jsonWeb.js";
 import {hash,genSalt} from 'bcrypt';
 import friendRequestModel from "../models/friendRequestModel.js";
+import jwt, { decode } from "jsonwebtoken";
 
 export const authenticate = async(req,res,next)=>{
     try{
@@ -32,7 +33,9 @@ export const LoginUser=async(req,res)=>{
 }
 export const registerUser=async(req,res)=>{
     try {
-        const {username,email,password}=req.body;
+        const decoded = jwt.verify(req.headers.authorization,process.env.VERIFY_SECRET_KEY);
+        const {username,email,password}=decoded;
+        console.log(username,email,password);
         let result;
         if(req.file){
             result=await User.create({username,email,password,profileImage:req.file.filename});    
@@ -100,10 +103,9 @@ export const addFriend=async(req,res)=>{
 }
 export const getFriendsofUser=async(req,res)=>{
     try{
-        console.log("here")
         const id = req.user._id;
         const user = await User.findById(id).populate('friends').lean();
-        const message = await messageModel.aggregate([{$match:{receiverId:id,isRead:false}},{$lookup:{
+        const message = await messageModel.aggregate([{$match:{receiverId:user._id,isRead:false}},{$lookup:{
             from:"users",
             foreignField:"_id",
             localField:"senderId",
@@ -145,13 +147,17 @@ export const readUserMessages=async(req,res)=>{
         const {receiverId,userId} = req.body;
         const result = await messageModel.updateMany({senderId:receiverId,receiverId:userId},{$set:{isRead:true}});
         return res.status(200).json(result);
-    }catch(err){}
+    }catch(err){
+        console.log(err);
+        return res.status(400).json({message:"Cannot Read Messages"});
+    }
 }
 export const updatePassword=async(req,res)=>{
     try {
-        const {id,data}=req.body;
+        const decoded = jwt.verify(req.headers.authorization,process.env.VERIFY_SECRET_KEY);
+        const {id,newpass}=decoded;
         const salt = await genSalt(10);
-        const hashPassword=await hash(data,salt);
+        const hashPassword=await hash(newpass,salt);
         const result = await User.findOneAndUpdate({_id:id},{$set:{password:hashPassword}});
         return res.status(200).json(result);
     } catch (error) {
@@ -168,10 +174,26 @@ export const getFriendRequests=async(req,res)=>{
         return res.status(401).json({message:error});
     }
 }
-// export const confirmRequest = async(req,res)=>{
-//     try {
-//         req.params.id;
-//     } catch (error) {
-//         return res.status(401).json({message:error});
-//     }
-// }
+
+export const handleUpdateFriendRequest = async(req,res)=>{
+    try {
+        const {requestId,senderId,receiverId}=req.body;
+            await friendRequestModel.findByIdAndUpdate(requestId,{$set:{status:true}});
+                        const result = await User.bulkWrite([
+                            {
+                                updateOne:{
+                                    filter:{_id:senderId},
+                                    update:{$addToSet:{friends:receiverId}}
+                                }
+                            },{
+                                updateOne:{
+                                    filter:{_id:receiverId},
+                                    update:{$addToSet:{friends:senderId}}
+                                }
+                            }
+                        ]);
+            return res.status(200).json(result);
+    } catch (error) {
+        return res.status(400).json({message:"error confirm request"});
+    }
+}
