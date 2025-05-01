@@ -22,7 +22,7 @@ router.patch('/messages',authenticate,readUserMessages);
 router.post('/password',authenticate,updatePassword);
 router.get('/request',authenticate,getFriendRequests);
 router.patch('/request',authenticate,handleUpdateFriendRequest);
-// router.post('/addFriend/:id',authenticate,addFriend);
 router.get('/:id',authenticate,getUserbyId);
+// router.post('/addFriend/:id',authenticate,addFriend);
 
 export default router;

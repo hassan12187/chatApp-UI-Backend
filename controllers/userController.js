@@ -70,13 +70,15 @@ export const getUserbyId=async(req,res)=>{
         const id = req.params.id;
         const user = await User.findOne({_id:id});
         const friendRequest = await friendRequestModel.findOne({senderId:myid,receiverId:id});
+        console.log(friendRequest)
         if(!friendRequest){
             return res.status(200).send({friends:false,user});
         }
-        if(friendRequest.status===false){
+        if(friendRequest.status==false){
             return res.status(200).send({friends:"pending",user});
         }
-        if(user.friends.includes(req.user._id)){
+        // user.friends.includes(req.user._id)
+        if(friendRequest.status==true){
             return res.status(200).send({friends:true,user});
         }
     } catch (error) {

@@ -105,19 +105,17 @@ dotenv.config();
             console.log("socket message");
             await messageQueue.add('newMessage',JSON.parse(message))
         });
-        socket.on('add-friend',async({requestSender,requestReceiver})=>{
+        socket.on('add-friend',async({requestSender,requestReceiver},callback)=>{
             const result = await friendRequestModel.findOne({senderId:requestSender?._id,receiverId:requestReceiver});
             if(result){
-                console.log("add-friend in cond")
                 return;
             }
             const friendSocketId = await redisClient.hGet('userSocketMap',requestReceiver);
-            console.log(friendSocketId)
             if(friendSocketId){
                 io.to(friendSocketId).emit("new_friend_request",requestSender)
             };
-            await friendRequestModel.create({senderId:requestSender?._id,receiverId:requestReceiver})  
-            console.log(`request sender ${requestSender} request receiver ${requestReceiver}`)
+            const createtionResult = await friendRequestModel.create({senderId:requestSender?._id,receiverId:requestReceiver})  
+            if(createtionResult) callback({status:200,message:"Request Sended"});
         });
         socket.on("confirm_request",async({requestId,senderId,receiverId})=>{
             try {
